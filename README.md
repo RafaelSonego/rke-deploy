@@ -22,6 +22,6 @@ On a successful deployment, rke cluster kubeconfig file (admin),client cert, cli
 4. For installing Metallb, request a pool of IP address first and update under metallb/metallb-configmap.yaml
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.6/manifests/namespace.yaml
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.6/manifests/metallb.yaml
-# On first install only
+*On first install only
 kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
 kubectl apply -f metallb/metallb-configmap.yaml
