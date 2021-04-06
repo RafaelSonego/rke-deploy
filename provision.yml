@@ -1,0 +1,227 @@
+---
+- name: Create rke user with passwordless sudo
+  hosts: all 
+  remote_user: admin
+  become: yes
+  tasks:
+    - name: Add RKE admin user
+      user:
+        name: rke
+        shell: /bin/bash
+     
+    - name: Create sudo file
+      file:
+        path: /etc/sudoers.d/rke
+        state: touch
+    
+    - name: Give rke user passwordless sudo
+      lineinfile:
+        path: /etc/sudoers.d/rke
+        state: present
+        line: 'rke ALL=(ALL:ALL) NOPASSWD: ALL'
+     
+    - name: Set authorized key taken from file
+      authorized_key:
+        user: rke
+        state: present
+        key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+- name: Load RKE kernel modules
+  hosts: all
+  remote_user: admin
+  become: yes
+  vars:
+    kernel_modules:
+      - br_netfilter
+      - ip6_udp_tunnel
+      - ip_set
+      - ip_set_hash_ip
+      - ip_set_hash_net
+      - iptable_filter
+      - iptable_nat
+      - iptable_mangle
+      - iptable_raw
+      - nf_conntrack_netlink
+#      - nf_conntrack
+#      - nf_conntrack_ipv4
+#      - nf_defrag_ipv4
+#      - nf_nat
+#      - nf_nat_ipv4
+#      - nf_nat_masquerade_ipv4
+      - nfnetlink
+      - udp_tunnel
+      - veth
+      - vxlan
+#      - x_tables
+      - xt_addrtype
+      - xt_conntrack
+      - xt_comment
+      - xt_mark
+      - xt_multiport
+      - xt_nat
+      - xt_recent
+      - xt_set
+      - xt_statistic
+      - xt_tcpudp
+
+  tasks:
+    - name: Load kernel modules for RKE
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      with_items: "{{ kernel_modules }}"
+
+- name: Disable swap and load kernel modules
+  hosts: all
+  remote_user: admin
+  become: yes
+  tasks:
+    - name: Disable SWAP since kubernetes can't work with swap enabled (1/2)
+      shell: |
+        swapoff -a
+     
+    - name: Disable SWAP in fstab since kubernetes can't work with swap enabled (2/2)
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+.*)$'
+        replace: '# \1'
+    - name: Modify sysctl entries
+      sysctl:
+        name: '{{ item.key }}'
+        value: '{{ item.value }}'
+        sysctl_set: yes
+        state: present
+        reload: yes
+      with_items:
+        - {key: net.bridge.bridge-nf-call-ip6tables, value: 1}
+        - {key: net.bridge.bridge-nf-call-iptables,  value: 1}
+        - {key: net.ipv4.ip_forward,  value: 1}
+    - name: Installing all pre-requisites packages
+      yum:
+        name:
+#         - deltarpm
+         - wget
+         - mc
+         - telnet
+         - unzip
+         - git
+         - bind-utils
+#         - jq
+         - iscsi-initiator-utils
+         - nfs-utils
+        state: present
+        update_cache: true
+
+    - name: Adding docker-ce repository for centos8
+      command: dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+
+    - name: Set AllowTcpForwarding yes
+      command: sed -i '/AllowTcpForwarding yes/s/^#//g' /etc/ssh/sshd_config
+
+    - name: Adding docker-ce repository for Centos-8
+      dnf:
+        name:
+          - docker-ce
+        state: latest
+
+#    - name: Add Docker-ce yum-repo for Centos-7
+#      get_url:
+#        url: https://download.docker.com/linux/centos/docker-ce.repo
+#        dest: /etc/yum.repos.d/docker-ce.repo
+#        mode: 0644
+
+    - name: Installing docker-ce (not podman-docker)
+      yum:
+        name:
+          - docker-ce
+        state: present
+        update_cache: true
+
+    - name: Starting docker service
+      systemd:
+        state: started
+        name: docker
+        enabled: yes
+
+    - name: Adding user rke to docker group
+      user:
+        name: rke
+        group: docker
+        append: yes
+  
+    - name: Opening firewall
+      firewalld:
+        zone: public
+        service: http
+        permanent: yes
+        state: enabled
+    - name: Opening firewall
+      firewalld:
+        zone: public
+        service: https
+        permanent: yes
+        state: enabled
+    - name: Opening firewall
+      firewalld:
+        zone: public
+        port: 6443/tcp
+        permanent: yes
+        state: enabled
+    - name: Opening firewall BIRD
+      firewalld:
+        zone: public
+        port: 179/tcp
+        permanent: yes
+        state: enabled
+    - name: Opening firewall BIRD
+      firewalld:
+        zone: public
+        port: 179/tcp
+        permanent: yes
+        state: enabled
+    - name: Opening firewall etcd
+      firewalld:
+        zone: public
+        port: 2376-2380/tcp
+        permanent: yes
+        state: enabled
+    - name: Opening firewall - kube-controller schedule
+      firewalld:
+        zone: public
+        port: 10250-10259/tcp
+        permanent: yes
+        state: enabled
+    - name: Opening firewall
+      firewalld:
+        zone: public
+        port: 9099/tcp
+        permanent: yes
+        state: enabled
+    - name: Opening firewall
+      firewalld:
+        zone: public
+        port: 8472/udp
+        permanent: yes
+        state: enabled
+    - name: Opening firewall nodeport and kube-proxy
+      firewalld:
+        zone: public
+        port: 30000-32767/tcp
+        permanent: yes
+        state: enabled
+    - name: Opening firewall
+      firewalld:
+        zone: public
+        port: 30000-32767/udp
+        permanent: yes
+        state: enabled
+    - name: stop service firewalld
+      systemd:
+        state: stopped
+        name: firewalld
+        enabled: no
+    - name: Restart docker service due to the firewall rules applied.
+      service:
+        name: docker
+        state: restarted
+        enabled: yes

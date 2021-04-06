@@ -1,0 +1,8 @@
+.git/
+.terraform/
+.terraformignore
+**/kubeconfig/**
+**/.terraform/
+**/.terraform.*
+**/*.log
+**/plan*
