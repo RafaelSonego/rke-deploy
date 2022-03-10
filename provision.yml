@@ -137,6 +137,20 @@
         state: present
         update_cache: true
 
+    - name: reconfigure docker to use /apps for docker-data - add folder
+      file:
+        path: /etc/docker
+        state: directory
+        mode: '0755'
+
+    - name: reconfigurie docker to use /apps for docker-data - add daemon.json file
+      copy:
+        src: files/daemon.json
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: '0600'
+
     - name: Starting docker service
       systemd:
         state: started
