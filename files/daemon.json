@@ -1,0 +1,11 @@
+cat daemon.json 
+{
+    "data-root": "/apps/docker",
+    "storage-driver": "overlay2",
+    "dns": ["10.255.255.253", " 10.255.255.254"],
+    "log-driver": "json-file",
+    "log-opts": {
+      "max-size": "100m",
+      "max-file": "3"
+    }
+}
