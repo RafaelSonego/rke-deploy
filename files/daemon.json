@@ -1,4 +1,3 @@
-cat daemon.json 
 {
     "data-root": "/apps/docker",
     "storage-driver": "overlay2",
